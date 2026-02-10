@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETH/USDT Arbitrage Pro</title>
+    <style>
+        :root {
+            --bg-deep: #12161c;
+            --bg-card: #1e2329;
+            --text-gray: #848e9c;
+            --bid-green: #02c076;
+            --ask-red: #f84960;
+            --accent-green: rgba(2, 192, 118, 0.2);
+            --accent-red: rgba(248, 73, 96, 0.2);
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: white;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 450px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #333;
+            position: relative;
+        }
+
+        /* --- Header Section --- */
+        header {
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .pair-title { font-weight: bold; font-size: 1.2rem; }
+        .spread-info { color: var(--text-gray); font-size: 0.9rem; }
+        .spread-value { color: var(--bid-green); font-family: monospace; }
+
+        /* --- Main Content Grid --- */
+        .main-content {
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        /* --- Left Side: Exchanges --- */
+        .exchange-sidebar {
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow-y: auto;
+            border-right: 1px solid #2a2e33;
+        }
+
+        .ex-item {
+            background: var(--bg-card);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .ex-name { font-size: 0.7rem; color: var(--text-gray); display: block; margin-bottom: 4px;}
+        .ex-price { font-size: 0.95rem; font-weight: bold; font-family: monospace; }
+
+        /* Dynamic Highlighting Classes */
+        .highest-bid { background-color: var(--bid-green) !important; color: white !important; }
+        .highest-bid .ex-name { color: white; }
+        .lowest-ask { background-color: var(--ask-red) !important; color: white !important; }
+        .lowest-ask .ex-name { color: white; }
+
+        /* --- Right Side: Order Book --- */
+        .order-book {
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .book-header {
+            display: flex;
+            justify-content: space-between;
+            color: var(--text-gray);
+            font-size: 0.75rem;
+            margin-bottom: 10px;
+        }
+
+        .price-list { flex: 1; display: flex; flex-direction: column; }
+        
+        .order-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-family: monospace;
+            font-size: 0.85rem;
+            position: relative;
+        }
+
+        .row-bar {
+            position: absolute;
+            right: 0; top: 2px; bottom: 2px;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
+        .mid-price {
+            font-size: 1.4rem;
+            color: var(--ask-red);
+            padding: 15px 0;
+            font-weight: bold;
+        }
+
+        /* --- Bottom Navigation --- */
+        nav {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            background: var(--bg-card);
+            padding: 10px 0;
+            border-top: 1px solid #333;
+        }
+
+        .nav-item {
+            text-align: center;
+            font-size: 0.7rem;
+            color: var(--text-gray);
+        }
+        .nav-item.active { color: var(--bid-green); }
+
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <header>
+            <div class="pair-title">☰ ETH/USDT</div>
+            <div class="spread-info">Bid-ask spread <span class="spread-value" id="live-spread">0.000000</span></div>
+        </header>
+
+        <div class="main-content">
+            <div class="exchange-sidebar" id="exchange-list">
+                </div>
+
+            <div class="order-book">
+                <div class="book-header">
+                    <span>Price (USDT)</span>
+                    <span>Amount (ETH)</span>
+                </div>
+                
+                <div class="price-list" id="asks-container"></div>
+                <div class="mid-price" id="mid-price">0000.00</div>
+                <div class="price-list" id="bids-container"></div>
+            </div>
+        </div>
+
+        <nav>
+            <div class="nav-item active">🏠<br>Home</div>
+            <div class="nav-item">📈<br>Analysis</div>
+            <div class="nav-item">⚙️<br>Plan</div>
+            <div class="nav-item">👤<br>Assets</div>
+        </nav>
+    </div>
+
+    <script>
+        const exchanges = [
+            { name: 'Huobi', price: 2632.54 },
+            { name: 'ZB', price: 2632.02 },
+            { name: 'Bitfinex', price: 2618.98 },
+            { name: 'Bittrex', price: 2627.51 },
+            { name: 'Binance', price: 2633.99 },
+            { name: 'Mxc', price: 2620.17 },
+            { name: 'Boboo', price: 2617.19 },
+            { name: 'Poloniex', price: 2631.76 },
+            { name: 'Coinbase', price: 2628.76 },
+            { name: 'Kraken', price: 2616.33 }
+        ];
+
+        function updateUI() {
+            const listContainer = document.getElementById('exchange-list');
+            listContainer.innerHTML = '';
+
+            // Fluctuate prices slightly
+            exchanges.forEach(ex => {
+                ex.price += (Math.random() - 0.5) * 2;
+            });
+
+            // Find Max and Min for highlighting
+            const prices = exchanges.map(e => e.price);
+            const maxPrice = Math.max(...prices);
+            const minPrice = Math.min(...prices);
+
+            exchanges.forEach(ex => {
+                const isMax = ex.price === maxPrice;
+                const isMin = ex.price === minPrice;
+                
+                listContainer.innerHTML += `
+                    <div class="ex-item ${isMax ? 'highest-bid' : ''} ${isMin ? 'lowest-ask' : ''}">
+                        <span class="ex-name">${ex.name}</span>
+                        <span class="ex-price">${ex.price.toFixed(2)}</span>
+                    </div>
+                `;
+            });
+
+            // Update Spread
+            const spread = maxPrice - minPrice;
+            document.getElementById('live-spread').innerText = spread.toFixed(6);
+            document.getElementById('mid-price').innerText = minPrice.toFixed(2);
+
+            // Update Order Book Rows
+            renderBook('asks-container', minPrice, 'var(--ask-red)', 'var(--accent-red)', true);
+            renderBook('bids-container', minPrice - 5, 'var(--bid-green)', 'var(--accent-green)', false);
+        }
+
+        function renderBook(containerId, startPrice, textColor, barColor, isReverse) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            for(let i=0; i<8; i++) {
+                const p = isReverse ? startPrice + (i*1) : startPrice - (i*1);
+                const amt = (Math.random() * 50).toFixed(4);
+                const width = Math.random() * 80;
+                container.innerHTML += `
+                    <div class="order-row" style="color: ${textColor}">
+                        <span>${p.toFixed(4)}</span>
+                        <span style="color: white">${amt}</span>
+                        <div class="row-bar" style="width: ${width}%; background: ${barColor}"></div>
+                    </div>
+                `;
+            }
+        }
+
+        setInterval(updateUI, 1000);
+        updateUI();
+    </script>
+</body>
+</html>
